@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 pragma solidity >=0.8.4;
+pragma experimental ABIEncoderV2;
 
 import "./ERC721.sol";
 
 contract InventoryNFT is ERC721 {
     /*///////////////////////////////////////////////////////////////
-                            INVENTORY STORAGE
+                        INVENTORY STORAGE
 
         - A brand should only need 1 InventoryNFT contract
         - A brand may have multiple products
@@ -16,8 +17,8 @@ contract InventoryNFT is ERC721 {
 
     address public brand; // Default to Legitimate Team
     address public lgt;
-    mapping(uint256 => Product) public products;
     uint256 public productId;
+    mapping(uint256 => Product) public products;
     mapping(uint256 => Item) public items;
     mapping(uint256 => string) private _tokenURI;
 
@@ -31,11 +32,13 @@ contract InventoryNFT is ERC721 {
     struct Item {
         uint256 productId;
         address[] owners;
+        string[] variants;
         uint256 price;
         Location location;
         bool isChipped;
         bool isDigitized;
-        bool readyForAuction;
+        bool canAuction;
+        bool hasBid;
         bool isSold;
         bool isShipped;
     }
@@ -49,7 +52,7 @@ contract InventoryNFT is ERC721 {
     }
 
     /*///////////////////////////////////////////////////////////////
-                            ERRORS
+                        ERRORS
     //////////////////////////////////////////////////////////////*/
 
     error NotBrand();
@@ -69,7 +72,7 @@ contract InventoryNFT is ERC721 {
     error MaxQuantityReached();
 
     /*///////////////////////////////////////////////////////////////
-                            MODIFIERS
+                        MODIFIERS
     //////////////////////////////////////////////////////////////*/
 
     modifier OnlyBrand() {
@@ -83,7 +86,7 @@ contract InventoryNFT is ERC721 {
     }
 
     /*///////////////////////////////////////////////////////////////
-                            CONSTRUCTOR
+                        CONSTRUCTOR
     //////////////////////////////////////////////////////////////*/
 
     constructor(string memory name_, string memory symbol_)
@@ -94,20 +97,30 @@ contract InventoryNFT is ERC721 {
     }
 
     /*///////////////////////////////////////////////////////////////
-                            INVENTORY LOGIC
+                        INVENTORY LOGIC
     //////////////////////////////////////////////////////////////*/
 
     function createProduct(
         string calldata name,
-        string[] calldata variants,
+        string[] memory variants,
+        uint256[] calldata quantity
+    ) public OnlyBrand OnlyLegitimate {
+        updateProduct(productId, name, variants, quantity);
+        productId++;
+    }
+
+    function updateProduct(
+        uint256 _productId,
+        string calldata name,
+        string[] memory variants,
         uint256[] calldata quantity
     ) public OnlyBrand OnlyLegitimate {
         if (variants.length != quantity.length) revert NoParity();
 
-        // Create new product
-        products[productId].name = name;
-        products[productId].variants = variants;
-        products[productId].quantityPerVariant = quantity;
+        // Update existing product
+        products[_productId].name = name;
+        products[_productId].variants = variants;
+        products[_productId].quantityPerVariant = quantity;
 
         // Check if total quantity matches across variants
         uint256 bufferCount;
@@ -121,13 +134,11 @@ contract InventoryNFT is ERC721 {
         }
 
         if (totalItemCount % bufferCount != 0) revert InvalidInventoryCount();
-
-        productId++;
     }
 
     function mintItem(
         uint256 _productId,
-        string[] calldata variants, // e.g., [XS, black]
+        string[] memory variants, // e.g., [XS, black]
         uint256 price,
         Location location,
         bool isChipped,
@@ -140,6 +151,7 @@ contract InventoryNFT is ERC721 {
         // Create new item
         items[totalSupply].productId = _productId;
         items[totalSupply].owners.push(msg.sender);
+        items[totalSupply].variants = variants;
         items[totalSupply].price = price;
         items[totalSupply].location = location;
         items[totalSupply].isChipped = isChipped;
@@ -170,59 +182,66 @@ contract InventoryNFT is ERC721 {
         }
     }
 
-    function prepareItemForAuction(uint256[] calldata itemIds)
+    function updateItem(
+        uint256[] calldata itemIds,
+        uint256 price,
+        Location location,
+        bool isChipped,
+        bool isDigitized,
+        string calldata uri
+    ) public OnlyBrand OnlyLegitimate {
+        for (uint256 i = 0; i < itemIds.length; i++) {
+            items[itemIds[i]].price = price;
+            items[itemIds[i]].location = location;
+            items[itemIds[i]].isChipped = isChipped;
+            items[itemIds[i]].isDigitized = isDigitized;
+            _tokenURI[itemIds[i]] = uri;
+        }
+    }
+
+    function readyForAuction(uint256[] calldata itemIds)
         public
+        view
         OnlyBrand
         OnlyLegitimate
     {
         for (uint256 i = 0; i < itemIds.length; i++) {
             if (items[itemIds[i]].isChipped && items[itemIds[i]].isDigitized) {
-                items[itemIds[i]].readyForAuction == true;
+                items[itemIds[i]].canAuction == true;
             }
         }
     }
 
-    function isItemBiddedOn(
+    function setBidStatus(
         uint256[] calldata itemIds,
         bool[] calldata isBidded
     ) public OnlyBrand OnlyLegitimate {
         if (itemIds.length != isBidded.length) revert NoParity();
 
-        uint256 numberItemBidded;
-
         for (uint256 i = 0; i < itemIds.length; i++) {
-            if (items[itemIds[i]].readyForAuction && isBidded[i]) {
-                numberItemBidded++;
-
-                if (
-                    numberItemBidded >
-                    products[items[itemIds[i]].productId].inventory[0]
-                ) revert MaxQuantityReached();
+            if (items[itemIds[i]].canAuction && isBidded[i]) {
+                if (products[items[itemIds[i]].productId].inventory[0] == 0)
+                    revert MaxQuantityReached();
                 products[items[itemIds[i]].productId].inventory[0]--;
                 products[items[itemIds[i]].productId].inventory[1]++;
+                items[itemIds[i]].hasBid = true;
             } else {
                 revert ItemNotAvailableForAuction();
             }
         }
     }
 
-    function isItemSold(uint256[] calldata itemIds, bool[] calldata isSold)
+    function setSaleStatus(uint256[] calldata itemIds, bool[] calldata isSold)
         public
         OnlyBrand
         OnlyLegitimate
     {
         if (itemIds.length != isSold.length) revert NoParity();
 
-        uint256 numberItemSold;
-
         for (uint256 i = 0; i < itemIds.length; i++) {
-            if (items[itemIds[i]].readyForAuction && isSold[i]) {
-                numberItemSold++;
-
-                if (
-                    numberItemSold >
-                    products[items[itemIds[i]].productId].inventory[1]
-                ) revert MaxQuantityReached();
+            if (items[itemIds[i]].hasBid && isSold[i]) {
+                if (products[items[itemIds[i]].productId].inventory[1] == 0)
+                    revert MaxQuantityReached();
                 products[items[itemIds[i]].productId].inventory[1]--;
                 products[items[itemIds[i]].productId].inventory[2]++;
                 items[itemIds[i]].isSold = true;
@@ -232,7 +251,7 @@ contract InventoryNFT is ERC721 {
         }
     }
 
-    function isItemShipped(
+    function setShippingStatus(
         uint256[] calldata itemIds,
         bool[] calldata isShipped
     ) public OnlyBrand OnlyLegitimate {
@@ -241,7 +260,7 @@ contract InventoryNFT is ERC721 {
         uint256 numberItemShipped;
 
         for (uint256 i = 0; i < itemIds.length; i++) {
-            if (items[itemIds[i]].readyForAuction && isShipped[i]) {
+            if (items[itemIds[i]].canAuction && isShipped[i]) {
                 numberItemShipped++;
 
                 if (
@@ -258,7 +277,7 @@ contract InventoryNFT is ERC721 {
         }
     }
 
-    function isItemDelivered(
+    function setDeliveryStatus(
         uint256[] calldata itemIds,
         bool[] calldata isDelivered
     ) public OnlyBrand OnlyLegitimate {
@@ -271,44 +290,32 @@ contract InventoryNFT is ERC721 {
         }
     }
 
-    function updateProduct(
-        uint256 _productId,
-        string calldata name,
-        string[] calldata variants,
-        uint256[] calldata quantity
-    ) public OnlyBrand OnlyLegitimate {
-        if (variants.length != quantity.length) revert NoParity();
-
-        // Update existing product
-        products[_productId].name = name;
-        products[_productId].variants = variants;
-        products[_productId].quantityPerVariant = quantity;
-    }
-
-    function updateItem(
-        uint256[] calldata itemIds,
-        uint256 price,
-        Location location,
-        bool isChipped,
-        bool isDigitized,
-        bool isShipped,
-        string calldata uri
-    ) public OnlyBrand OnlyLegitimate {
-        for (uint256 i = 0; i < itemIds.length; i++) {
-            items[itemIds[i]].price = price;
-            items[itemIds[i]].location = location;
-            items[itemIds[i]].isChipped = isChipped;
-            items[itemIds[i]].isDigitized = isDigitized;
-            items[itemIds[i]].isShipped = isShipped;
-            _tokenURI[itemIds[i]] = uri;
-        }
-    }
-
     /*///////////////////////////////////////////////////////////////
-                            ERC721 LOGIC
+                        ERC721 LOGIC
     //////////////////////////////////////////////////////////////*/
 
     function burn(uint256 tokenId) public virtual OnlyBrand OnlyLegitimate {
+        for (uint256 i = 0; i < products[items[tokenId].productId].variants.length; i++) {
+            for (uint256 j = 0; j < items[tokenId].variants.length; j++) {
+                if (
+                    compareStrings(
+                        products[items[tokenId].productId].variants[i],
+                        items[tokenId].variants[j]
+                    )
+                ) {
+                    if (products[items[tokenId].productId].inventory[0] == 0) revert MaxQuantityReached();
+                    
+                    // Update Product inventory according to Item status
+                    if (items[tokenId].canAuction && !items[tokenId].hasBid) { products[items[tokenId].productId].inventory[0]--; }
+                    if (items[tokenId].hasBid && !items[tokenId].isSold) { products[items[tokenId].productId].inventory[1]--; }
+                    if (items[tokenId].isSold && !items[tokenId].isShipped) { products[items[tokenId].productId].inventory[2]--; }
+                    if (items[tokenId].isShipped) { products[items[tokenId].productId].inventory[3]--; }
+                } else {
+                    revert NoVariantFound();
+                }
+            }
+        } 
+        
         _burn(tokenId);
     }
 
@@ -323,12 +330,16 @@ contract InventoryNFT is ERC721 {
     }
 
     /*///////////////////////////////////////////////////////////////
-                            MISC
+                        OWNERSHIP LOGIC
     //////////////////////////////////////////////////////////////*/
 
     function updateBrand(address _brand) public OnlyBrand OnlyLegitimate {
         brand = _brand;
     }
+
+    /*///////////////////////////////////////////////////////////////
+                            HELPER
+    //////////////////////////////////////////////////////////////*/
 
     function compareStrings(string memory a, string memory b)
         public
