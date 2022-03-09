@@ -64,6 +64,8 @@ contract InventoryNFT is ERC721 {
 
     error NoProductFound();
 
+    error NoItemFound();
+
     error QuantityMismatch();
 
     error NotReadyForAuction();
@@ -185,6 +187,7 @@ contract InventoryNFT is ERC721 {
         string calldata uri
     ) public OnlyBrand OnlyLegitimate {
         for (uint256 i = 0; i < itemIds.length; i++) {
+            if (ownerOf[itemIds[i]] == address(0)) revert NoItemFound();
             items[itemIds[i]].owner = owner;
             items[itemIds[i]].price = price;
             items[itemIds[i]].location = location;
