@@ -168,6 +168,8 @@ contract InventoryNFT is ERC721 {
                     if (products[_productId].quantityPerVariant[i] == 0) revert MaxQuantityReached();
                     products[_productId].quantityPerVariant[i]--;
                     products[_productId].inventory[0]++;
+                } else {
+                    revert NoProductFound();
                 }
             }
         }
