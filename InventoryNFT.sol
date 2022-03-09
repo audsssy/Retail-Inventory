@@ -108,7 +108,11 @@ contract InventoryNFT is ERC721 {
         string[] memory variants,
         uint256[] calldata quantityPerVariant
     ) public OnlyBrand OnlyLegitimate {
-        updateProduct(productId, name, variants, quantityPerVariant);
+        if (variants.length != quantityPerVariant.length) revert NoParity();
+
+        products[productId].name = name;
+        products[productId].variants = variants;
+        products[productId].quantityPerVariant = quantityPerVariant;
         productId++;
     }
 
@@ -118,21 +122,13 @@ contract InventoryNFT is ERC721 {
         string[] memory variants,
         uint256[] calldata quantityPerVariant
     ) public OnlyBrand OnlyLegitimate {
+        if (products[_productId].variants.length == 0) revert NoProductFound();
         if (variants.length != quantityPerVariant.length) revert NoParity();
 
         // Update existing product
         products[_productId].name = name;
         products[_productId].variants = variants;
         products[_productId].quantityPerVariant = quantityPerVariant;
-
-        // Check if total quantity matches across variants
-        // uint256 _quantity;
-        // for (uint256 i = 0; i < products[productId].variants.length; i++) {
-        //     while (!compareStrings(products[productId].variants[i], "BUFFER")) {
-        //         _quantity += (products[productId].quantityPerVariant[i]);
-        //     }
-        //     if (_quantity != products[productId].quantity) revert QuantityMismatch();
-        // }
     }
 
     function mintItem(
