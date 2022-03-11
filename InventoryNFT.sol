@@ -133,6 +133,15 @@ contract InventoryNFT is ERC721 {
         products[_productId].quantityPerVariant = quantityPerVariant;
     }
 
+    function getProducts(uint256 tokenId) public view OnlyBrand OnlyLegitimate returns (string memory, string[] memory, uint256[] memory, uint256[4] memory) {
+        string memory _name = products[tokenId].name;
+        string[] memory _variants = products[tokenId].variants;
+        uint256[] memory _quantityPerVariant = products[tokenId].quantityPerVariant;
+        uint256[4] memory _inventory = products[tokenId].inventory;
+
+        return (_name, _variants, _quantityPerVariant, _inventory);
+    }
+
     function mintItem(
         uint256 _productId,
         string[] memory variants, // e.g., [XS, black]
