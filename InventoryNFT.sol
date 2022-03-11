@@ -2,9 +2,9 @@
 
 pragma solidity >=0.8.4;
 
-import "./ERC721.sol";
+import "./InventoryNFT.sol";
 
-contract InventoryNFT is ERC721 {
+contract Inventory is InventoryNFT {
     /*///////////////////////////////////////////////////////////////
                         INVENTORY STORAGE
 
@@ -95,7 +95,7 @@ contract InventoryNFT is ERC721 {
     //////////////////////////////////////////////////////////////*/
 
     constructor(string memory name_, string memory symbol_)
-        ERC721(name_, symbol_)
+        InventoryNFT(name_, symbol_)
     {
         brand = msg.sender;
         lgt = msg.sender;
