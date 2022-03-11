@@ -14,6 +14,7 @@ contract Inventory is InventoryNFT {
         - Each item is repped by a token id
     //////////////////////////////////////////////////////////////*/
 
+    string public brandName;
     address public brand; // Default to Legitimate Team
     address public lgt;
     uint256 public productId;
@@ -94,9 +95,10 @@ contract Inventory is InventoryNFT {
                         CONSTRUCTOR
     //////////////////////////////////////////////////////////////*/
 
-    constructor(string memory name_, string memory symbol_)
+    constructor(string memory brandName_, string memory name_, string memory symbol_)
         InventoryNFT(name_, symbol_)
     {
+        brandName = brandName_;
         brand = msg.sender;
         lgt = msg.sender;
     }
