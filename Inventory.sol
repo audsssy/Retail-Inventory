@@ -14,7 +14,6 @@ contract Inventory is InventoryNFT {
         - Each item is repped by a token id
     //////////////////////////////////////////////////////////////*/
 
-    string public brandName;
     address public brand; // Default to Legitimate Team
     address public lgt;
     uint256 public productId;
@@ -23,6 +22,7 @@ contract Inventory is InventoryNFT {
     mapping(uint256 => string) private _tokenURI;
 
     struct Product {
+        string brand;
         string name;
         string[] variants; // e.g., [XS, S, M, L, XL, BUFFER, black, red, white, BUFFER]
         uint256[] quantityPerVariant;
@@ -95,10 +95,9 @@ contract Inventory is InventoryNFT {
                         CONSTRUCTOR
     //////////////////////////////////////////////////////////////*/
 
-    constructor(string memory brandName_, string memory name_, string memory symbol_)
+    constructor(string memory name_, string memory symbol_)
         InventoryNFT(name_, symbol_)
     {
-        brandName = brandName_;
         brand = msg.sender;
         lgt = msg.sender;
     }
@@ -108,12 +107,14 @@ contract Inventory is InventoryNFT {
     //////////////////////////////////////////////////////////////*/
 
     function createProduct(
+        string calldata _brand,
         string calldata name,
         string[] memory variants,
         uint256[] calldata quantityPerVariant
     ) public OnlyBrand OnlyLegitimate {
         if (variants.length != quantityPerVariant.length) revert NoParity();
 
+        products[productId].brand = _brand;
         products[productId].name = name;
         products[productId].variants = variants;
         products[productId].quantityPerVariant = quantityPerVariant;
@@ -135,13 +136,14 @@ contract Inventory is InventoryNFT {
         products[_productId].quantityPerVariant = quantityPerVariant;
     }
 
-    function getProducts(uint256 tokenId) public view OnlyBrand OnlyLegitimate returns (string memory, string[] memory, uint256[] memory, uint256[4] memory) {
+    function getProducts(uint256 tokenId) public view OnlyBrand OnlyLegitimate returns (string memory, string memory, string[] memory, uint256[] memory, uint256[4] memory) {
+        string memory _brand = products[tokenId].brand;
         string memory _name = products[tokenId].name;
         string[] memory _variants = products[tokenId].variants;
         uint256[] memory _quantityPerVariant = products[tokenId].quantityPerVariant;
         uint256[4] memory _inventory = products[tokenId].inventory;
 
-        return (_name, _variants, _quantityPerVariant, _inventory);
+        return (_brand, _name, _variants, _quantityPerVariant, _inventory);
     }
 
     function mintItem(
