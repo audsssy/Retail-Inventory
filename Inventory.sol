@@ -113,6 +113,7 @@ contract Inventory is InventoryNFT {
         uint256[] calldata quantityPerVariant
     ) public OnlyBrand OnlyLegitimate {
         if (variants.length != quantityPerVariant.length) revert NoParity();
+        if (variants.length == 0) revert NoProductFound();
 
         products[productId].brand = _brand;
         products[productId].name = name;
@@ -127,8 +128,8 @@ contract Inventory is InventoryNFT {
         string[] memory variants,
         uint256[] calldata quantityPerVariant
     ) public OnlyBrand OnlyLegitimate {
-        if (products[_productId].variants.length == 0) revert NoProductFound();
         if (variants.length != quantityPerVariant.length) revert NoParity();
+        if (products[_productId].variants.length == 0) revert NoProductFound();
 
         // Update existing product
         products[_productId].name = name;
@@ -136,7 +137,7 @@ contract Inventory is InventoryNFT {
         products[_productId].quantityPerVariant = quantityPerVariant;
     }
 
-    function getProducts(uint256 tokenId) public view OnlyBrand OnlyLegitimate returns (string memory, string memory, string[] memory, uint256[] memory, uint256[4] memory) {
+    function getProducts(uint256 tokenId) public view returns (string memory, string memory, string[] memory, uint256[] memory, uint256[4] memory) {
         string memory _brand = products[tokenId].brand;
         string memory _name = products[tokenId].name;
         string[] memory _variants = products[tokenId].variants;
@@ -157,41 +158,29 @@ contract Inventory is InventoryNFT {
     ) public virtual OnlyBrand OnlyLegitimate {
         if (_productId > productId) revert NoProductFound();
 
+        // Check if item variant is valid and if quantity allows
+        bool available = false;
+        available = checkProductAvailability(totalSupply, variants.length);
+
         // Create new item
-        items[totalSupply].productId = _productId;
-        items[totalSupply].owner = msg.sender;
-        items[totalSupply].variants = variants;
-        items[totalSupply].price = price;
-        items[totalSupply].location = location;
-        items[totalSupply].isChipped = isChipped;
-        items[totalSupply].isDigitized = isDigitized;
+        if (available) {
+            items[totalSupply].productId = _productId;
+            items[totalSupply].owner = msg.sender;
+            items[totalSupply].variants = variants;
+            items[totalSupply].price = price;
+            items[totalSupply].location = location;
+            items[totalSupply].isChipped = isChipped;
+            items[totalSupply].isDigitized = isDigitized;
 
-        // Mint item
-        _tokenURI[totalSupply] = uri;
-        _mint(brand, totalSupply++);
-
-        // Update Product inventory
-        for (uint256 i = 0; i < products[_productId].variants.length; i++) {
-            for (uint256 j = 0; j < variants.length; j++) {
-
-                if (
-                    compareStrings(
-                        products[_productId].variants[i],
-                        variants[j]
-                    )
-                ) {
-                    if (products[_productId].quantityPerVariant[i] == 0) revert MaxQuantityReached();
-                    products[_productId].quantityPerVariant[i]--;
-                    products[_productId].inventory[0]++;
-                } else {
-                    revert NoProductFound();
-                }
-            }
+            // Mint item
+            _tokenURI[totalSupply] = uri;
+            _mint(brand, totalSupply);
+            totalSupply++;
         }
     }
 
     function updateItem(
-        uint256[] calldata itemIds,
+        uint256[] calldata tokenIds,
         address owner,
         uint256 price,
         Location location,
@@ -199,64 +188,100 @@ contract Inventory is InventoryNFT {
         bool isDigitized,
         string calldata uri
     ) public OnlyBrand OnlyLegitimate {
-        for (uint256 i = 0; i < itemIds.length; i++) {
-            if (ownerOf[itemIds[i]] == address(0)) revert NoItemFound();
-            items[itemIds[i]].owner = owner;
-            items[itemIds[i]].price = price;
-            items[itemIds[i]].location = location;
-            items[itemIds[i]].isChipped = isChipped;
-            items[itemIds[i]].isDigitized = isDigitized;
-            _tokenURI[itemIds[i]] = uri;
+        for (uint256 i = 0; i < tokenIds.length; i++) {
+            if (ownerOf[tokenIds[i]] == address(0)) revert NoItemFound();
+            items[tokenIds[i]].owner = owner;
+            items[tokenIds[i]].price = price;
+            items[tokenIds[i]].location = location;
+            items[tokenIds[i]].isChipped = isChipped;
+            items[tokenIds[i]].isDigitized = isDigitized;
+            _tokenURI[tokenIds[i]] = uri;
         }
     }
 
-    function readyForAuction(uint256[] calldata itemIds)
+    function getItemVariants(uint256 tokenId) public view returns (string[] memory) {
+        return (items[tokenId].variants);
+    }
+
+    function readyForAuction(uint256[] calldata tokenIds)
         public
         OnlyBrand
         OnlyLegitimate
     {
-        for (uint256 i = 0; i < itemIds.length; i++) {
-            if (!items[itemIds[i]].isChipped || !items[itemIds[i]].isDigitized) {
+
+        for (uint256 i = 0; i < tokenIds.length; i++) {
+            if (!items[tokenIds[i]].isChipped || !items[tokenIds[i]].isDigitized) {
                 revert NotReadyForAuction();
             } else {
-                items[itemIds[i]].canAuction = true;
+                items[tokenIds[i]].canAuction = true;
+                bool available = checkProductAvailability(tokenIds[i], items[tokenIds[i]].variants.length);
+                if (available) {
+                    products[items[tokenIds[i]].productId].quantityPerVariant[i]--;
+                    products[items[tokenIds[i]].productId].inventory[0]++;
+                }
             }
         }
     }
 
+    function checkProductAvailability(uint256 tokenId, uint256 _itemVariantLength) internal view returns (bool) {
+        uint256 _productId = items[tokenId].productId;
+        uint256 productVariantlength = products[_productId].variants.length;
+        bool available = false;
+
+        // Update Product inventory
+        for (uint256 i = 0; i < productVariantlength; i++) {
+            for (uint256 j = 0; j < _itemVariantLength; j++) {
+
+                if (
+                    compareStrings(
+                        products[_productId].variants[i],
+                        items[tokenId].variants[j]
+                    )
+                ) {
+                    if (products[_productId].quantityPerVariant[i] == 0) revert MaxQuantityReached();
+                } else {
+                    revert NoProductFound();
+                }
+            }
+        }
+
+        available = true;
+        return (available);
+    }
+
     function setBidStatus(
-        uint256[] calldata itemIds,
+        uint256[] calldata tokenIds,
         bool[] calldata isBidded
     ) public OnlyBrand OnlyLegitimate {
-        if (itemIds.length != isBidded.length) revert NoParity();
+        if (tokenIds.length != isBidded.length) revert NoParity();
 
-        for (uint256 i = 0; i < itemIds.length; i++) {
-            if (items[itemIds[i]].canAuction && isBidded[i]) {
-                if (products[items[itemIds[i]].productId].inventory[0] == 0)
+        for (uint256 i = 0; i < tokenIds.length; i++) {
+            if (items[tokenIds[i]].canAuction && isBidded[i]) {
+                if (products[items[tokenIds[i]].productId].inventory[0] == 0)
                     revert MaxQuantityReached();
-                products[items[itemIds[i]].productId].inventory[0]--;
-                products[items[itemIds[i]].productId].inventory[1]++;
-                items[itemIds[i]].hasBid = true;
+                products[items[tokenIds[i]].productId].inventory[0]--;
+                products[items[tokenIds[i]].productId].inventory[1]++;
+                items[tokenIds[i]].hasBid = true;
             } else {
                 revert ItemNotAvailableForAuction();
             }
         }
     }
 
-    function setSaleStatus(uint256[] calldata itemIds, bool[] calldata isSold)
+    function setSaleStatus(uint256[] calldata tokenIds, bool[] calldata isSold)
         public
         OnlyBrand
         OnlyLegitimate
     {
-        if (itemIds.length != isSold.length) revert NoParity();
+        if (tokenIds.length != isSold.length) revert NoParity();
 
-        for (uint256 i = 0; i < itemIds.length; i++) {
-            if (items[itemIds[i]].hasBid && isSold[i]) {
-                if (products[items[itemIds[i]].productId].inventory[1] == 0)
+        for (uint256 i = 0; i < tokenIds.length; i++) {
+            if (items[tokenIds[i]].hasBid && isSold[i]) {
+                if (products[items[tokenIds[i]].productId].inventory[1] == 0)
                     revert MaxQuantityReached();
-                products[items[itemIds[i]].productId].inventory[1]--;
-                products[items[itemIds[i]].productId].inventory[2]++;
-                items[itemIds[i]].isSold = true;
+                products[items[tokenIds[i]].productId].inventory[1]--;
+                products[items[tokenIds[i]].productId].inventory[2]++;
+                items[tokenIds[i]].isSold = true;
             } else {
                 revert ItemNotAvailableForAuction();
             }
@@ -264,25 +289,25 @@ contract Inventory is InventoryNFT {
     }
 
     function setShippingStatus(
-        uint256[] calldata itemIds,
+        uint256[] calldata tokenIds,
         bool[] calldata isShipped
     ) public OnlyBrand OnlyLegitimate {
-        if (itemIds.length != isShipped.length) revert NoParity();
+        if (tokenIds.length != isShipped.length) revert NoParity();
 
         uint256 numberItemShipped;
 
-        for (uint256 i = 0; i < itemIds.length; i++) {
-            if (items[itemIds[i]].canAuction && isShipped[i]) {
+        for (uint256 i = 0; i < tokenIds.length; i++) {
+            if (items[tokenIds[i]].canAuction && isShipped[i]) {
                 numberItemShipped++;
 
                 if (
                     numberItemShipped >
-                    products[items[itemIds[i]].productId].inventory[2]
+                    products[items[tokenIds[i]].productId].inventory[2]
                 ) revert MaxQuantityReached();
-                products[items[itemIds[i]].productId].inventory[2]--;
-                products[items[itemIds[i]].productId].inventory[3]++;
-                items[itemIds[i]].isShipped = true;
-                items[itemIds[i]].location = Location.TRANSIT;
+                products[items[tokenIds[i]].productId].inventory[2]--;
+                products[items[tokenIds[i]].productId].inventory[3]++;
+                items[tokenIds[i]].isShipped = true;
+                items[tokenIds[i]].location = Location.TRANSIT;
             } else {
                 revert ItemNotAvailableForAuction();
             }
@@ -290,15 +315,15 @@ contract Inventory is InventoryNFT {
     }
 
     function setDeliveryStatus(
-        uint256[] calldata itemIds,
+        uint256[] calldata tokenIds,
         bool[] calldata isDelivered
     ) public OnlyBrand OnlyLegitimate {
-        if (itemIds.length != isDelivered.length) revert NoParity();
+        if (tokenIds.length != isDelivered.length) revert NoParity();
 
-        for (uint256 i = 0; i < itemIds.length; i++) {
+        for (uint256 i = 0; i < tokenIds.length; i++) {
             isDelivered[i]
-                ? items[itemIds[i]].location = Location.BUYER
-                : items[itemIds[i]].location = Location.TRANSIT;
+                ? items[tokenIds[i]].location = Location.BUYER
+                : items[tokenIds[i]].location = Location.TRANSIT;
         }
     }
 
