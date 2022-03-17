@@ -156,31 +156,25 @@ contract Inventory is InventoryNFT {
         bool isDigitized,
         string calldata uri // Not really necessary
     ) public virtual OnlyBrand OnlyLegitimate {
-        if (_productId > productId) revert NoProductFound();
-
-        // Check if item variant is valid and if quantity allows
-        bool available = false;
-        available = checkProductAvailability(totalSupply, variants.length);
+        if (products[_productId].variants.length == 0) revert NoProductFound();
 
         // Create new item
-        if (available) {
-            items[totalSupply].productId = _productId;
-            items[totalSupply].owner = msg.sender;
-            items[totalSupply].variants = variants;
-            items[totalSupply].price = price;
-            items[totalSupply].location = location;
-            items[totalSupply].isChipped = isChipped;
-            items[totalSupply].isDigitized = isDigitized;
+        items[totalSupply].productId = _productId;
+        items[totalSupply].owner = msg.sender;
+        items[totalSupply].variants = variants;
+        items[totalSupply].price = price;
+        items[totalSupply].location = location;
+        items[totalSupply].isChipped = isChipped;
+        items[totalSupply].isDigitized = isDigitized;
 
-            // Mint item
-            _tokenURI[totalSupply] = uri;
-            _mint(brand, totalSupply);
-            totalSupply++;
-        }
+        // Mint item
+        _tokenURI[totalSupply] = uri;
+        _mint(brand, totalSupply);
     }
 
     function updateItem(
         uint256[] calldata tokenIds,
+        string[] memory variants,
         address owner,
         uint256 price,
         Location location,
@@ -190,6 +184,7 @@ contract Inventory is InventoryNFT {
     ) public OnlyBrand OnlyLegitimate {
         for (uint256 i = 0; i < tokenIds.length; i++) {
             if (ownerOf[tokenIds[i]] == address(0)) revert NoItemFound();
+            items[tokenIds[i]].variants = variants;
             items[tokenIds[i]].owner = owner;
             items[tokenIds[i]].price = price;
             items[tokenIds[i]].location = location;
@@ -214,7 +209,7 @@ contract Inventory is InventoryNFT {
                 revert NotReadyForAuction();
             } else {
                 items[tokenIds[i]].canAuction = true;
-                bool available = checkProductAvailability(tokenIds[i], items[tokenIds[i]].variants.length);
+                bool available = checkProductAvailability(tokenIds[i]);
                 if (available) {
                     products[items[tokenIds[i]].productId].quantityPerVariant[i]--;
                     products[items[tokenIds[i]].productId].inventory[0]++;
@@ -223,29 +218,27 @@ contract Inventory is InventoryNFT {
         }
     }
 
-    function checkProductAvailability(uint256 tokenId, uint256 _itemVariantLength) internal view returns (bool) {
+    function checkProductAvailability(uint256 tokenId) internal view returns (bool) {
         uint256 _productId = items[tokenId].productId;
-        uint256 productVariantlength = products[_productId].variants.length;
+        uint256 productVariantLength = products[_productId].variants.length;
+        uint256 itemVariantLength = items[tokenId].variants.length;
         bool available = false;
 
         // Update Product inventory
-        for (uint256 i = 0; i < productVariantlength; i++) {
-            for (uint256 j = 0; j < _itemVariantLength; j++) {
+        for (uint256 i = 0; i < productVariantLength; i++) {
+            for (uint256 j = 0; j < itemVariantLength; j++) {
 
-                if (
-                    compareStrings(
-                        products[_productId].variants[i],
-                        items[tokenId].variants[j]
-                    )
-                ) {
-                    if (products[_productId].quantityPerVariant[i] == 0) revert MaxQuantityReached();
+                if (compareStrings(products[_productId].variants[i], items[tokenId].variants[j])) {
+                    // if (products[_productId].quantityPerVariant[i] == 0) revert MaxQuantityReached();
+                    require(products[_productId].quantityPerVariant[i] != 0, "Max Quantity Reached");
+                    available = true;
                 } else {
-                    revert NoProductFound();
+                    // revert NoProductFound();
+                    uint _a = 0;
+                    require(_a != 0, "No Product Found");
                 }
             }
-        }
-
-        available = true;
+        }  
         return (available);
     }
 
@@ -385,5 +378,29 @@ contract Inventory is InventoryNFT {
     {
         return (keccak256(abi.encodePacked((a))) ==
             keccak256(abi.encodePacked((b))));
+    }
+
+    // https://github.com/ethereum/dapp-bin/blob/master/library/stringUtils.sol
+    function compare(string calldata _a, string calldata _b) internal pure returns (int) {
+        bytes memory a = bytes(_a);
+        bytes memory b = bytes(_b);
+        uint minLength = a.length;
+        if (b.length < minLength) minLength = b.length;
+        //@todo unroll the loop into increments of 32 and do full 32 byte comparisons
+        for (uint i = 0; i < minLength; i ++)
+            if (a[i] < b[i])
+                return -1;
+            else if (a[i] > b[i])
+                return 1;
+        if (a.length < b.length)
+            return -1;
+        else if (a.length > b.length)
+            return 1;
+        else
+            return 0;
+    }
+
+    function equal(string calldata _a, string calldata _b) public pure returns (bool) {
+        return compare(_a, _b) == 0;
     }
 }
