@@ -7,7 +7,6 @@ import "./InventoryNFT.sol";
 contract Inventory is InventoryNFT {
     /*///////////////////////////////////////////////////////////////
                         INVENTORY STORAGE
-
         - A brand should only need 1 InventoryNFT contract
         - A brand may have multiple products
         - Each product may have multiple items 
@@ -229,13 +228,13 @@ contract Inventory is InventoryNFT {
             for (uint256 j = 0; j < itemVariantLength; j++) {
 
                 if (compareStrings(products[_productId].variants[i], items[tokenId].variants[j])) {
-                    // if (products[_productId].quantityPerVariant[i] == 0) revert MaxQuantityReached();
-                    require(products[_productId].quantityPerVariant[i] != 0, "Max Quantity Reached");
+                    if (products[_productId].quantityPerVariant[i] == 0) revert MaxQuantityReached();
+                    // require(products[_productId].quantityPerVariant[i] != 0, "Max Quantity Reached");
                     available = true;
                 } else {
                     // revert NoProductFound();
-                    uint _a = 0;
-                    require(_a != 0, "No Product Found");
+                    // uint _a = 0;
+                    // require(_a != 0, "No Product Found");
                 }
             }
         }  
