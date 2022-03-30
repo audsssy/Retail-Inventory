@@ -156,6 +156,7 @@ contract Inventory is InventoryNFT {
         string calldata uri // Not really necessary
     ) public virtual OnlyBrand OnlyLegitimate {
         if (products[_productId].variants.length == 0) revert NoProductFound();
+        if (!checkItemAvailability(_productId, variants)) revert NoItemFound();
 
         // Create new item
         items[totalSupply].productId = _productId;
@@ -171,6 +172,23 @@ contract Inventory is InventoryNFT {
         _mint(brand, totalSupply);
     }
 
+    function checkItemAvailability(uint256 _productId, string[] memory _variants) internal view returns (bool) {
+        uint256 productVariantLength = products[_productId].variants.length;
+        bool available = false;
+
+        // Update Product inventory
+        for (uint256 i = 0; i < productVariantLength; i++) {
+            for (uint256 j = 0; j < _variants.length; j++) {
+
+                if (compareStrings(products[_productId].variants[i], _variants[j])) {
+                    if (products[_productId].quantityPerVariant[i] == 0) revert MaxQuantityReached();
+                    available = true;
+                }
+            }
+        }  
+        return (available);
+    }
+    
     function updateItem(
         uint256[] calldata tokenIds,
         string[] memory variants,
@@ -229,12 +247,7 @@ contract Inventory is InventoryNFT {
 
                 if (compareStrings(products[_productId].variants[i], items[tokenId].variants[j])) {
                     if (products[_productId].quantityPerVariant[i] == 0) revert MaxQuantityReached();
-                    // require(products[_productId].quantityPerVariant[i] != 0, "Max Quantity Reached");
                     available = true;
-                } else {
-                    // revert NoProductFound();
-                    // uint _a = 0;
-                    // require(_a != 0, "No Product Found");
                 }
             }
         }  
