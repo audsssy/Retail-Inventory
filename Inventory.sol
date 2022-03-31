@@ -190,7 +190,7 @@ contract Inventory is InventoryNFT {
     }
     
     function updateItem(
-        uint256[] calldata tokenIds,
+        uint256 tokenId,
         string[] memory variants,
         address owner,
         uint256 price,
@@ -199,16 +199,18 @@ contract Inventory is InventoryNFT {
         bool isDigitized,
         string calldata uri
     ) public OnlyBrand OnlyLegitimate {
-        for (uint256 i = 0; i < tokenIds.length; i++) {
-            if (ownerOf[tokenIds[i]] == address(0)) revert NoItemFound();
-            items[tokenIds[i]].variants = variants;
-            items[tokenIds[i]].owner = owner;
-            items[tokenIds[i]].price = price;
-            items[tokenIds[i]].location = location;
-            items[tokenIds[i]].isChipped = isChipped;
-            items[tokenIds[i]].isDigitized = isDigitized;
-            _tokenURI[tokenIds[i]] = uri;
-        }
+        if (ownerOf[tokenId] == address(0)) revert NoItemFound();
+        
+        uint256 _productId = items[tokenId].productId;
+        if (!checkItemAvailability(_productId, variants)) revert NoItemFound();
+
+        items[tokenId].variants = variants;
+        items[tokenId].owner = owner;
+        items[tokenId].price = price;
+        items[tokenId].location = location;
+        items[tokenId].isChipped = isChipped;
+        items[tokenId].isDigitized = isDigitized;
+        _tokenURI[tokenId] = uri;
     }
 
     function getItemVariants(uint256 tokenId) public view returns (string[] memory) {
